@@ -36,3 +36,31 @@ jobs:
       contents: write
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/semantic-version.yml@main
 ```
+
+## commit-lint
+
+[`../.github/workflows/commit-lint.yml`](../.github/workflows/commit-lint.yml)
+
+Enforces Conventional Commits on the commits in a push or pull request,
+using [`wagoid/commitlint-github-action`](https://github.com/wagoid/commitlint-github-action).
+No config file is shipped here — the action falls back to
+`@commitlint/config-conventional` automatically when it doesn't find one in
+the caller's repo, and that ruleset's types (`feat`, `fix`, `chore`, etc.)
+and `!`/`BREAKING CHANGE:` footer are exactly what `semantic-version`'s
+default patterns look for. Keeping commits conventional is what makes that
+workflow's major/minor/patch classification reliable instead of defaulting
+everything to a patch bump.
+
+No extra permissions needed — it only reads commit history:
+
+```yaml
+# .github/workflows/commit-lint.yml
+name: Commit lint
+
+on:
+  pull_request:
+
+jobs:
+  lint:
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/commit-lint.yml@main
+```
