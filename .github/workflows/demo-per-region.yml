@@ -1,0 +1,25 @@
+name: "Demo: per-region deploy"
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  plan:
+    strategy:
+      matrix:
+        region: [eastus, westus2]
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-plan.yml@main
+    with:
+      working_directory: demos/scaling-demo
+      plan_artifact_name: tfplan-region-${{ matrix.region }}
+      tfvars_json: '{"region":"${{ matrix.region }}"}'
+
+  apply:
+    needs: plan
+    strategy:
+      matrix:
+        region: [eastus, westus2]
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-apply.yml@main
+    with:
+      working_directory: demos/scaling-demo
+      plan_artifact_name: tfplan-region-${{ matrix.region }}

@@ -15,18 +15,22 @@ on:
         description: Name to upload the plan file as, for a later terraform-apply.yml call to consume
         type: string
         default: "tfplan"
-      azure_client_id:
-        description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed)
+      tfvars_json:
+        description: JSON object of Terraform variables to write as a .auto.tfvars.json file before planning
         type: string
-        required: true
+        default: "{}"
+      azure_client_id:
+        description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed). Leave empty for root configs that don't use the azurerm provider.
+        type: string
+        default: ""
       azure_tenant_id:
         description: Azure AD tenant ID
         type: string
-        required: true
+        default: ""
       azure_subscription_id:
         description: Azure subscription ID
         type: string
-        required: true
+        default: ""
 
 permissions:
   id-token: write
@@ -46,6 +50,10 @@ jobs:
         with:
           terraform_version: ${{ inputs.terraform_version }}
           terraform_wrapper: "true"
+
+      - name: Write tfvars
+        working-directory: ${{ inputs.working_directory }}
+        run: echo '${{ inputs.tfvars_json }}' > ci.auto.tfvars.json
 
       - name: terraform init
         working-directory: ${{ inputs.working_directory }}

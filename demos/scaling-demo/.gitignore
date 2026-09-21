@@ -1,0 +1,6 @@
+.terraform/
+.terraform.lock.hcl
+tfplan
+ci.auto.tfvars.json
+scope-*.txt
+terraform.tfstate*

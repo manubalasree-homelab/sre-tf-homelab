@@ -150,3 +150,14 @@ jobs:
       azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
       azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 ```
+
+`azure_client_id`/`azure_tenant_id`/`azure_subscription_id` are optional —
+leave them out entirely for a root config that doesn't use the `azurerm`
+provider. `tfvars_json` (plan only; the saved plan file carries the
+resolved values into apply) lets a matrix caller inject per-scope variables
+without needing separate config per scope.
+
+For a working, runnable proof of the account/environment/region matrix
+pattern above — including the `environment`-gate mechanism, using a
+credential-free `local`-provider root config so it actually runs today —
+see [`../demos/`](../demos/README.md).

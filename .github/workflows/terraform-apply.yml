@@ -23,17 +23,17 @@ on:
         type: string
         default: ""
       azure_client_id:
-        description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed)
+        description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed). Leave empty for root configs that don't use the azurerm provider.
         type: string
-        required: true
+        default: ""
       azure_tenant_id:
         description: Azure AD tenant ID
         type: string
-        required: true
+        default: ""
       azure_subscription_id:
         description: Azure subscription ID
         type: string
-        required: true
+        default: ""
 
 permissions:
   id-token: write
