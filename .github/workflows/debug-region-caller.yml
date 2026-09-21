@@ -8,7 +8,10 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    strategy:
+      matrix:
+        region: [eastus, westus2]
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-region-plan.yml@main
     with:
       working_directory: demos/scaling-demo
-      region: eastus
+      region: ${{ matrix.region }}
