@@ -4,40 +4,48 @@ A working demonstration of scaling the Terraform plan/apply reusable
 workflows across multiple accounts, environments, and regions — one real,
 runnable pipeline per dimension, rather than just a description.
 
-## Why this isn't literally `per-account/jobs/terraform_apply.yml`
+## How this maps to `per-account/jobs/terraform_apply.yml`
 
-The original model for this (a GitLab-style layout) has real, independently
-schedulable job files nested arbitrarily deep, e.g.
-`per-account/jobs/terraform_apply.yml`. GitHub Actions doesn't support
-that: **any** workflow file — reusable or not — is only ever discovered by
-GitHub if it lives flat under `.github/workflows/`. There's no per-scope
-subfolder of job definitions to point at.
+The original model for this (a GitLab-style layout) has real,
+independently schedulable job files nested arbitrarily deep, e.g.
+`per-account/jobs/terraform_apply.yml`. GitHub Actions doesn't allow a
+*callable* workflow to live anywhere but flat under `.github/workflows/`,
+so that exact shape isn't possible for the schedulable part — but composite
+actions have no such restriction, so the actual per-scope logic does live
+at those nested paths: [`../per-account/jobs/`](../per-account/jobs/),
+[`../per-region/jobs/`](../per-region/jobs/),
+[`../per-environment/jobs/`](../per-environment/jobs/). A thin flat
+`workflow_call` wrapper per scope+action
+(`per-account-plan.yml`/`per-account-apply.yml`, etc., in
+`.github/workflows/`) exists only to get a real, independently
+schedulable and gateable job — see
+[ADR-0001](../docs/adr/0001-per-scope-terraform-plan-apply.md) for the full
+reasoning, including what this trades away (three copies of similar bash
+logic, one per scope) for what it buys (each scope's logic — workspace
+selection, approval-gate semantics — reflects what that scope actually
+needs, not a lowest-common-denominator generic path).
 
-So the split by scope happens a different way here:
-
-- The actual engine — [`terraform-plan.yml`](../.github/workflows/terraform-plan.yml)
-  and [`terraform-apply.yml`](../.github/workflows/terraform-apply.yml) —
-  is scope-agnostic. It takes a `working_directory` plus optional
-  `account`/`region`/`environment`/`service` values; it has no idea
-  whether a given call represents an account, an environment, or a region.
-- Each scaling dimension gets its own **caller** workflow instead of its
-  own job file: [`demo-per-account.yml`](../.github/workflows/demo-per-account.yml),
+- Each scaling dimension gets its own **caller** demo workflow:
+  [`demo-per-account.yml`](../.github/workflows/demo-per-account.yml),
   [`demo-per-environment.yml`](../.github/workflows/demo-per-environment.yml),
   [`demo-per-region.yml`](../.github/workflows/demo-per-region.yml). Each
-  runs a `strategy.matrix` over its scope's values, calling the same two
-  reusable workflows once per value.
-- Per-scope **approval gates** (the actual reason the original model kept
-  them as separate files) come from `terraform-apply.yml`'s
-  `github_environment` input, mapped to a real [GitHub Environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment).
-  `demo-per-environment.yml` maps its `prod` matrix value to a `prod`
-  GitHub Environment configured in this repo with a required reviewer —
-  `dev`/`staging` apply straight through, `prod` pauses for approval. This
-  is the same mechanism a real per-account or per-region gate would use.
-- Per-scope **state isolation** comes from `terraform-plan.yml`/
-  `terraform-apply.yml`'s `account` input: when set, it selects (creating
-  if needed) a Terraform workspace of that name before planning/applying.
+  runs a `strategy.matrix` over its scope's values, calling that scope's
+  dedicated plan/apply wrapper pair once per value.
+- Per-scope **approval gates**: `per-environment-apply.yml`'s `environment`
+  input doubles as the GitHub Environment gate name directly (for this
+  scope, the deployment environment *is* the natural gate). `demo-per-
+  environment.yml` passes `prod`, which maps to a real `prod` GitHub
+  Environment configured in this repo with a required reviewer — `dev`/
+  `staging` apply straight through, `prod` pauses for approval.
+  `per-account-apply.yml`/`per-region-apply.yml` instead take an optional,
+  separate `github_environment` input, since account/region values have no
+  inherent approval-gate meaning of their own.
+- Per-scope **state isolation** comes from `per-account-plan.yml`/
+  `per-account-apply.yml`'s `account` input: it selects (creating if
+  needed) a Terraform workspace of that name before planning/applying.
   `demo-per-account.yml` passes its matrix value here, so `acct-a` and
-  `acct-b` each get their own workspace.
+  `acct-b` each get their own workspace. Per-region and per-environment
+  don't do this — only account maps to a workspace in this design.
 - Per-scope **variables** come from the cascading var-file convention
   (`var_files_root` + `account`/`region`/`environment`/`service`; see
   [`scaling-demo/vars/`](scaling-demo/vars/) and the catalog README for
@@ -55,8 +63,8 @@ credentials, no backend setup, nothing external. It declares `account`,
 writes a marker file recording whatever scope it was given. This is what
 lets the whole matrix actually run and be verified in CI today, instead of
 being scaffolding that only makes sense once real Azure credentials and a
-real root config exist (unlike `terraform-plan.yml`/`terraform-apply.yml`
-used for real infrastructure, which do need those).
+real root config exist (unlike the per-scope plan/apply actions used for
+real infrastructure, which do need those).
 
 ## Running a demo
 

@@ -1,0 +1,64 @@
+name: Per-account Terraform apply
+description: Applies a previously-created plan for a specific account (Azure subscription), in its matching Terraform workspace.
+
+inputs:
+  working_directory:
+    required: true
+  terraform_version:
+    default: "latest"
+  plan_artifact_name:
+    default: "tfplan"
+  account:
+    required: true
+    description: Must match the account passed to the plan action, so the same Terraform workspace gets selected.
+  backend_config:
+    default: ""
+  azure_client_id:
+    default: ""
+  azure_tenant_id:
+    default: ""
+  azure_subscription_id:
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - name: Set Azure OIDC env
+      shell: bash
+      run: |
+        echo "ARM_CLIENT_ID=${{ inputs.azure_client_id }}" >> "$GITHUB_ENV"
+        echo "ARM_TENANT_ID=${{ inputs.azure_tenant_id }}" >> "$GITHUB_ENV"
+        echo "ARM_SUBSCRIPTION_ID=${{ inputs.azure_subscription_id }}" >> "$GITHUB_ENV"
+        echo "ARM_USE_OIDC=true" >> "$GITHUB_ENV"
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.plan_artifact_name }}
+        path: ${{ inputs.working_directory }}
+
+    - name: terraform init
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        BACKEND_CONFIG: ${{ inputs.backend_config }}
+      run: |
+        init_args=()
+        while IFS= read -r line; do
+          [ -z "$line" ] && continue
+          init_args+=("-backend-config=$line")
+        done <<< "$BACKEND_CONFIG"
+        terraform init "${init_args[@]}"
+
+    - name: Select workspace for account
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: terraform workspace select -or-create "${{ inputs.account }}"
+
+    - name: terraform apply
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: terraform apply -input=false tfplan

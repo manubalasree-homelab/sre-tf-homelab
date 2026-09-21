@@ -1,0 +1,97 @@
+name: Per-environment Terraform plan
+description: Plans a Terraform root config for a specific environment (e.g. dev/staging/prod).
+
+inputs:
+  working_directory:
+    required: true
+  terraform_version:
+    default: "latest"
+  plan_artifact_name:
+    default: "tfplan"
+  environment:
+    required: true
+  account:
+    default: ""
+  region:
+    default: ""
+  service:
+    default: ""
+  var_files_root:
+    description: Base directory for the cascading var-file convention, relative to working_directory.
+    default: ""
+  tfvars_json:
+    default: "{}"
+  backend_config:
+    default: ""
+  azure_client_id:
+    default: ""
+  azure_tenant_id:
+    default: ""
+  azure_subscription_id:
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+        terraform_wrapper: "true"
+
+    - name: Set Azure OIDC env
+      shell: bash
+      run: |
+        echo "ARM_CLIENT_ID=${{ inputs.azure_client_id }}" >> "$GITHUB_ENV"
+        echo "ARM_TENANT_ID=${{ inputs.azure_tenant_id }}" >> "$GITHUB_ENV"
+        echo "ARM_SUBSCRIPTION_ID=${{ inputs.azure_subscription_id }}" >> "$GITHUB_ENV"
+        echo "ARM_USE_OIDC=true" >> "$GITHUB_ENV"
+
+    - name: terraform init
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        BACKEND_CONFIG: ${{ inputs.backend_config }}
+      run: |
+        init_args=()
+        while IFS= read -r line; do
+          [ -z "$line" ] && continue
+          init_args+=("-backend-config=$line")
+        done <<< "$BACKEND_CONFIG"
+        terraform init "${init_args[@]}"
+
+    - name: terraform plan
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        VAR_FILES_ROOT: ${{ inputs.var_files_root }}
+        ACCOUNT: ${{ inputs.account }}
+        REGION: ${{ inputs.region }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        SERVICE: ${{ inputs.service }}
+        TFVARS_JSON: ${{ inputs.tfvars_json }}
+      run: |
+        var_file_args=()
+        if [ -n "$VAR_FILES_ROOT" ]; then
+          candidates=("$VAR_FILES_ROOT/global.tfvars")
+          [ -n "$ACCOUNT" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/account.tfvars")
+          [ -n "$ACCOUNT" ] && [ -n "$REGION" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/$REGION/region.tfvars")
+          [ -n "$ACCOUNT" ] && [ -n "$REGION" ] && [ -n "$ENVIRONMENT" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/$REGION/$ENVIRONMENT/env.tfvars")
+          [ -n "$ACCOUNT" ] && [ -n "$REGION" ] && [ -n "$ENVIRONMENT" ] && [ -n "$SERVICE" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/$REGION/$ENVIRONMENT/$SERVICE.tfvars")
+          for f in "${candidates[@]}"; do
+            if [ -e "$f" ]; then
+              echo "Using var file: $f"
+              var_file_args+=("-var-file=$f")
+            else
+              echo "::warning::var file not found, skipping: $f"
+            fi
+          done
+        fi
+        echo "$TFVARS_JSON" > ci-overrides.tfvars.json
+        var_file_args+=("-var-file=ci-overrides.tfvars.json")
+        terraform plan -out=tfplan -input=false "${var_file_args[@]}"
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.plan_artifact_name }}
+        path: ${{ inputs.working_directory }}/tfplan
+        retention-days: 5

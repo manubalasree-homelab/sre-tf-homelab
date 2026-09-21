@@ -65,29 +65,12 @@ jobs:
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/commit-lint.yml@main
 ```
 
-## Terraform: lint, validate, plan, apply
+## Terraform: lint, validate
 
-Four workflows for a Terraform CI/CD pipeline, modeled on a common
-lint → validate → plan → apply pipeline shape. Where that model usually
-has separate plan/apply copies per account, environment, and region, here
-there's just one `terraform-plan.yml` / `terraform-apply.yml`, parameterized
-by `working_directory` — the calling repo runs a matrix over its own
-accounts/environments/regions instead of this repo maintaining N near-
-identical copies. Per-scope approval gates (the actual reason those used to
-need separate files) are expressed via `terraform-apply.yml`'s `environment`
-input, mapped to a [GitHub Environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)
-with its own required reviewers.
-
-All four share
-[`../actions/terraform-setup`](../actions/terraform-setup/action.yml), a
-composite action (checkout + install Terraform CLI) — composite actions,
-unlike reusable workflows, aren't restricted to `.github/workflows/`, so it
-lives here as the shared step sequence.
-
-**`terraform-lint.yml`** and **`terraform-validate.yml`** need no cloud
-credentials — `terraform fmt`, `terraform validate`, and `terraform test`
-(run automatically if `*.tftest.hcl` files exist) are all static/local
-checks. Consume both from a module repo like `sre-tf-azure-vnet`:
+Two workflows, needing no cloud credentials — `terraform fmt`, `terraform
+validate`, and `terraform test` (run automatically if `*.tftest.hcl` files
+exist) are all static/local checks. Consume both from a module repo like
+`sre-tf-azure-vnet`:
 
 ```yaml
 # .github/workflows/validate.yml
@@ -105,46 +88,70 @@ jobs:
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-validate.yml@main
 ```
 
-**`terraform-plan.yml`** and **`terraform-apply.yml`** authenticate to
-Azure via OIDC (`ARM_USE_OIDC=true` + the ambient GitHub Actions ID token —
-no client secret, but the caller must grant `permissions: id-token: write`
-and pass `azure_client_id`/`azure_tenant_id`/`azure_subscription_id`, all
+Both share
+[`../actions/terraform-setup`](../actions/terraform-setup/action.yml), a
+composite action (checkout + install Terraform CLI) — composite actions,
+unlike reusable workflows, aren't restricted to `.github/workflows/`, so it
+lives here as the shared step sequence.
+
+## Terraform: plan/apply, per scaling scope
+
+Deliberately duplicated **per scope** rather than one generic
+`terraform-plan.yml`/`terraform-apply.yml` — see
+[ADR-0001](../docs/adr/0001-per-scope-terraform-plan-apply.md) for why. Three
+scopes, each with its own plan+apply pair:
+
+| Scope | Plan | Apply | Distinctive behavior |
+|---|---|---|---|
+| Account (Azure subscription) | [`per-account-plan.yml`](../.github/workflows/per-account-plan.yml) | [`per-account-apply.yml`](../.github/workflows/per-account-apply.yml) | Selects/creates a Terraform workspace named after `account` |
+| Region | [`per-region-plan.yml`](../.github/workflows/per-region-plan.yml) | [`per-region-apply.yml`](../.github/workflows/per-region-apply.yml) | No workspace switching — regions share the account's workspace |
+| Environment (dev/staging/prod) | [`per-environment-plan.yml`](../.github/workflows/per-environment-plan.yml) | [`per-environment-apply.yml`](../.github/workflows/per-environment-apply.yml) | `environment` doubles as the GitHub Environment approval-gate name — no separate gate input |
+
+Each pair is a thin flat `workflow_call` wrapper (required, since GitHub
+has no nested per-scope job-file mechanism — see the ADR) around a
+composite action that holds the actual logic:
+[`../per-account/jobs/`](../per-account/jobs/),
+[`../per-region/jobs/`](../per-region/jobs/),
+[`../per-environment/jobs/`](../per-environment/jobs/). Composite actions
+can live at any path, so those mirror the original per-scope folder shape
+this was modeled on; the wrapper workflows exist only because scheduling a
+real, independently-gateable job requires a `workflow_call` file, and that
+must be flat.
+
+All three plan actions authenticate to Azure via OIDC (`ARM_USE_OIDC=true`
++ the ambient GitHub Actions ID token — no client secret, but the caller
+must grant `permissions: id-token: write`, already set in each wrapper) and
+pass `azure_client_id`/`azure_tenant_id`/`azure_subscription_id`, all
 optional — leave them out for a root config that doesn't use the `azurerm`
-provider). They only make sense for a Terraform *root* config with a real
-backend — not a reusable module repo like `vnet`/`aks`, which have no state
-of their own. Nothing in this org uses them for real yet (there's no
-root-config repo, and no Azure federated credential set up for CI); see
-[`../demos/`](../demos/README.md) for a working proof of the pattern using
-a credential-free root config.
+provider. They only make sense for a Terraform *root* config with a real
+backend — not a reusable module repo like `vnet`/`aks`. Nothing in this org
+uses them for real yet (there's no root-config repo, and no Azure
+federated credential set up for CI); see [`../demos/`](../demos/README.md)
+for a working proof of the pattern using a credential-free root config.
 
-Beyond the basics (`working_directory`, `terraform_version`,
-`plan_artifact_name`), both support scoping a multi-account/environment/
-region setup:
+Shared, generic inputs across all three plan actions:
 
-- **`account`**: if set, selects (creating if needed) a Terraform
-  workspace of this name before planning/applying — pass the *same* value
-  to both calls for a given scope, so apply runs against the same
-  workspace the plan was made in.
 - **`backend_config`**: newline-separated `key=value` pairs, each passed
-  as `terraform init -backend-config=...` — lets one backend definition
-  serve multiple scopes (e.g. a different state `key` per
-  account/environment/region). Must also match between the plan and apply
-  calls for the same scope.
-- **`var_files_root`** (plan only) + **`region`**/**`environment`**/
-  **`service`**: a cascading var-file convention, each applied only if the
-  file exists (a missing one just logs a warning, not a failure):
-  `<root>/global.tfvars` → `<root>/<account>/account.tfvars` →
+  as `terraform init -backend-config=...`. Must also match between the
+  plan and apply calls for the same scope.
+- **`var_files_root`** (plan only) + **`account`**/**`region`**/
+  **`environment`**/**`service`**: a cascading var-file convention, each
+  applied only if the file exists (a missing one just logs a warning, not
+  a failure): `<root>/global.tfvars` → `<root>/<account>/account.tfvars` →
   `<root>/<account>/<region>/region.tfvars` →
   `<root>/<account>/<region>/<environment>/env.tfvars` →
   `<root>/<account>/<region>/<environment>/<service>.tfvars`. Later files
-  override earlier ones.
+  override earlier ones. See
+  [`homelab-tf-account-vars`](https://github.com/manubalasree-homelab/homelab-tf-account-vars)
+  for the real instance of this convention.
 - **`tfvars_json`** (plan only): an ad-hoc JSON override, applied *after*
   the cascade — highest precedence, wins over everything above. The saved
   plan file carries all of this into apply, so apply doesn't need any of
-  it repeated except `account`/`backend_config`.
+  it repeated except the scope-selecting input (`account` for per-account)
+  and `backend_config`.
 
 ```yaml
-# .github/workflows/deploy.yml (example — not yet used by any repo)
+# .github/workflows/deploy.yml (example -- not yet used by any repo)
 name: Deploy
 
 on:
@@ -156,7 +163,7 @@ jobs:
     strategy:
       matrix:
         environment: [dev, staging, prod]
-    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-plan.yml@main
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-environment-plan.yml@main
     with:
       working_directory: environments/${{ matrix.environment }}
       plan_artifact_name: tfplan-${{ matrix.environment }}
@@ -171,20 +178,16 @@ jobs:
     strategy:
       matrix:
         environment: [dev, staging, prod]
-    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-apply.yml@main
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-environment-apply.yml@main
     with:
       working_directory: environments/${{ matrix.environment }}
       plan_artifact_name: tfplan-${{ matrix.environment }}
-      # github_environment (not "environment" -- that's terraform-plan's
-      # deployment-scope input, a different thing) is the GitHub
-      # Environment name for the approval gate.
-      github_environment: ${{ matrix.environment }}
+      environment: ${{ matrix.environment }}
       azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
       azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
       azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 ```
 
-For a working, runnable proof of the account/environment/region matrix
-pattern above — including the `environment`-gate mechanism, using a
-credential-free `local`-provider root config so it actually runs today —
-see [`../demos/`](../demos/README.md).
+For a working, runnable proof of all three scopes — including the
+per-environment approval gate — using a credential-free `local`-provider
+root config so it actually runs today, see [`../demos/`](../demos/README.md).

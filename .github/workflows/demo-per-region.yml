@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         region: [eastus, westus2]
-    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-plan.yml@main
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-region-plan.yml@main
     with:
       working_directory: demos/scaling-demo
       plan_artifact_name: tfplan-region-${{ matrix.region }}
@@ -25,7 +25,7 @@ jobs:
     strategy:
       matrix:
         region: [eastus, westus2]
-    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-apply.yml@main
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-region-apply.yml@main
     with:
       working_directory: demos/scaling-demo
       plan_artifact_name: tfplan-region-${{ matrix.region }}
