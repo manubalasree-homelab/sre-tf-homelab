@@ -1,0 +1,38 @@
+name: Terraform validate
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory containing the Terraform config to validate
+        type: string
+        default: "."
+      terraform_version:
+        description: Terraform CLI version to install
+        type: string
+        default: "latest"
+      run_tests:
+        description: Whether to also run `terraform test` (expects *.tftest.hcl files)
+        type: boolean
+        default: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: terraform init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform validate
+
+      - name: terraform test
+        if: inputs.run_tests
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform test

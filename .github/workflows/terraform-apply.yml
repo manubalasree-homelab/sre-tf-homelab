@@ -1,0 +1,68 @@
+name: Terraform apply
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory containing the Terraform root config to apply
+        type: string
+        required: true
+      terraform_version:
+        description: Terraform CLI version to install
+        type: string
+        default: "latest"
+      plan_artifact_name:
+        description: Name the plan file was uploaded as by a prior terraform-plan.yml call
+        type: string
+        default: "tfplan"
+      environment:
+        description: >
+          GitHub Environment to run this job under (for required-reviewer approval gates).
+          Leave empty for no gate. This is how per-account/per-environment/per-region
+          approval requirements are expressed, instead of separate apply workflows per scope.
+        type: string
+        default: ""
+      azure_client_id:
+        description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed)
+        type: string
+        required: true
+      azure_tenant_id:
+        description: Azure AD tenant ID
+        type: string
+        required: true
+      azure_subscription_id:
+        description: Azure subscription ID
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ARM_CLIENT_ID: ${{ inputs.azure_client_id }}
+  ARM_TENANT_ID: ${{ inputs.azure_tenant_id }}
+  ARM_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
+  ARM_USE_OIDC: "true"
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.plan_artifact_name }}
+          path: ${{ inputs.working_directory }}
+
+      - name: terraform init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: terraform apply
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform apply -input=false tfplan

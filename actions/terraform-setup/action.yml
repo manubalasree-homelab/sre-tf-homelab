@@ -1,0 +1,22 @@
+name: Terraform setup
+description: Checks out the caller repo and installs the Terraform CLI
+
+inputs:
+  terraform_version:
+    description: Terraform CLI version to install (see hashicorp/setup-terraform)
+    default: "latest"
+  terraform_wrapper:
+    description: Whether to wrap the terraform binary to expose stdout/stderr/exitcode as step outputs
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: hashicorp/setup-terraform@v4.0.1
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+        terraform_wrapper: ${{ inputs.terraform_wrapper }}

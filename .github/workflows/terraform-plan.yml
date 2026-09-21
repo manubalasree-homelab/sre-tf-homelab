@@ -1,0 +1,62 @@
+name: Terraform plan
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Directory containing the Terraform root config to plan
+        type: string
+        required: true
+      terraform_version:
+        description: Terraform CLI version to install
+        type: string
+        default: "latest"
+      plan_artifact_name:
+        description: Name to upload the plan file as, for a later terraform-apply.yml call to consume
+        type: string
+        default: "tfplan"
+      azure_client_id:
+        description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed)
+        type: string
+        required: true
+      azure_tenant_id:
+        description: Azure AD tenant ID
+        type: string
+        required: true
+      azure_subscription_id:
+        description: Azure subscription ID
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ARM_CLIENT_ID: ${{ inputs.azure_client_id }}
+  ARM_TENANT_ID: ${{ inputs.azure_tenant_id }}
+  ARM_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
+  ARM_USE_OIDC: "true"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: "true"
+
+      - name: terraform init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: terraform plan
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform plan -out=tfplan -input=false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.plan_artifact_name }}
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 5
