@@ -1,0 +1,52 @@
+name: Semantic version
+
+on:
+  workflow_call:
+    inputs:
+      tag_prefix:
+        description: Prefix used for version tags
+        type: string
+        default: "v"
+      major_pattern:
+        description: Regex (wrapped in /.../ ) matching a commit message that indicates a breaking change
+        type: string
+        default: "/!:|BREAKING CHANGE:/"
+      minor_pattern:
+        description: Regex (wrapped in /.../ ) matching a commit message that indicates a feature
+        type: string
+        default: "/feat(\\(.+\\))?:/"
+    outputs:
+      version:
+        description: The computed version, without the tag prefix (e.g. 1.2.0)
+        value: ${{ jobs.tag.outputs.version }}
+      version_tag:
+        description: The computed version tag (e.g. v1.2.0)
+        value: ${{ jobs.tag.outputs.version_tag }}
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: version
+        uses: paulhatch/semantic-version@v6.0.2
+        with:
+          tag_prefix: ${{ inputs.tag_prefix }}
+          major_pattern: ${{ inputs.major_pattern }}
+          minor_pattern: ${{ inputs.minor_pattern }}
+          version_format: "${major}.${minor}.${patch}"
+
+      - name: Create and push tag
+        if: steps.version.outputs.is_tagged != 'true'
+        run: |
+          git tag "${{ steps.version.outputs.version_tag }}"
+          git push origin "${{ steps.version.outputs.version_tag }}"
