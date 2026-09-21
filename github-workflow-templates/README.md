@@ -16,7 +16,11 @@ Computes the next semver tag from commit messages since the last tag (using
 `!:`/`BREAKING CHANGE:` → major, `feat:` → minor, anything else → patch) and
 pushes that tag if the version changed.
 
-Consume it from another repo in this org:
+Consume it from another repo in this org. The calling job must explicitly
+grant `contents: write` — this workflow pushes a tag, and a reusable
+workflow can't be granted more permission than its caller job has. Most
+repos default their workflow token to read-only, so omitting this fails
+the run at startup with no job ever created:
 
 ```yaml
 # .github/workflows/release.yml
@@ -28,5 +32,7 @@ on:
 
 jobs:
   release:
+    permissions:
+      contents: write
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/semantic-version.yml@main
 ```
