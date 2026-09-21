@@ -13,8 +13,6 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
     - uses: hashicorp/setup-terraform@v4.0.1
       with:
