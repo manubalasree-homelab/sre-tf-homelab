@@ -21,7 +21,8 @@ on:
         default: "{}"
       var_files_root:
         description: >
-          Base directory for the cascading var-file convention. If set, applies (in ascending
+          Base directory for the cascading var-file convention, relative to working_directory
+          (not the repo root). If set, applies (in ascending
           precedence, each only if the file exists): <root>/global.tfvars,
           <root>/<account>/account.tfvars, <root>/<account>/<region>/region.tfvars,
           <root>/<account>/<region>/<environment>/env.tfvars,

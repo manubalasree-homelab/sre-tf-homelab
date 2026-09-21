@@ -20,7 +20,7 @@ jobs:
       # environment), acct-b doesn't, so acct-b's plan logs a "not found" warning and
       # falls back to global.tfvars's region only. Demonstrates both layers together.
       tfvars_json: '{"account":"${{ matrix.account }}"}'
-      var_files_root: demos/scaling-demo/vars
+      var_files_root: vars
       account: ${{ matrix.account }}
 
   apply:
