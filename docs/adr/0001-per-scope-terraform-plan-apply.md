@@ -63,3 +63,14 @@ added nothing but repeated input pass-through.
 - A fourth scaling scope would mean a fourth composite-action pair,
   following the same shape as the three here — not a change to shared
   code.
+- We later added `per-account-deploy.yml`, `per-region-deploy.yml`, and
+  `per-environment-deploy.yml`: real `workflow_call` reusable workflows
+  (necessarily flat, per above) that each internally sequence that scope's
+  plan and apply composite actions via `needs:` for the common "just plan
+  then apply" case. These are not a reversal of removing the earlier
+  wrapper workflows — those added nothing but repeated pass-through; these
+  add actual job-dependency orchestration a lone composite action can't
+  express. They sit alongside direct composite-action consumption, not in
+  place of it: reach for the composite actions directly when something
+  needs to happen between plan and apply that a fixed two-job workflow
+  can't express.

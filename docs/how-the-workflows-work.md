@@ -222,6 +222,33 @@ level deeper. All of it runs as steps of the single `plan` job above;
 there's only ever one runner, one log group per step, one set of
 permissions — the ones declared right there on `plan`.
 
+### Or: skip writing that job at all
+
+If all you need is "plan, then apply, in order" with nothing custom in
+between, `per-account-deploy.yml` (and its `per-region`/`per-environment`
+siblings) does the above for you — it's a real reusable workflow (not a
+composite action) with two internal jobs, `plan` and `apply: needs: plan`,
+each calling the matching composite action. Since it's a genuine
+`workflow_call` file with its own job, *it* grants `permissions: id-token:
+write` and sets `environment:` internally — your caller job needs neither:
+
+```yaml
+jobs:
+  deploy:
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-account-deploy.yml@main
+    with:
+      working_directory: .
+      account: acct-a
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+```
+
+The trade-off: this fixed two-job shape can't fit a manual review step, an
+Infracost comment, or anything else between plan and apply. Reach for the
+composite action directly (as above) the moment you need that; reach for
+`-deploy.yml` when you don't.
+
 ## 5. The permissions/environment rule, restated for composite actions
 
 This is the thing that has caused the most confusing failures in this
@@ -253,6 +280,10 @@ even created.
 
 That's the whole system: four flat reusable workflows for independent,
 single-purpose jobs (`release`, `commit-lint`, `terraform-lint`,
-`terraform-validate`), and seven composite actions — one shared foundation
-(`terraform-setup`) plus three scope-specific plan/apply pairs — that
-consuming repos assemble into their own jobs, on their own terms.
+`terraform-validate`), three more flat reusable workflows that bundle
+plan+apply orchestration per scope (`per-account-deploy`,
+`per-region-deploy`, `per-environment-deploy`), and seven composite
+actions — one shared foundation (`terraform-setup`) plus three
+scope-specific plan/apply pairs — that consuming repos assemble into their
+own jobs directly, or reach for the bundled `-deploy.yml` workflows when
+they don't need anything custom in between.

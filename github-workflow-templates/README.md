@@ -203,3 +203,56 @@ jobs:
           azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
           azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 ```
+
+## Terraform: deploy (plan + apply combined), per scaling scope
+
+For the common case — just plan, then apply, in order, nothing custom in
+between — writing out both jobs with `needs:` every time is pure
+repetition. `per-account-deploy.yml`, `per-region-deploy.yml`, and
+`per-environment-deploy.yml` bundle that orchestration into one reusable
+workflow per scope, each internally calling the matching pair of composite
+actions above. Unlike the composite actions, these *are* real
+`workflow_call` reusable workflows (flat under `.github/workflows/`, as
+required) — worth being one, since sequencing `plan` → `apply` via
+`needs:` is real orchestration value, not just pass-through ceremony the
+way the now-removed generic wrappers were.
+
+This sits **alongside** the composite actions, not in place of them: reach
+for `per-account/jobs/terraform-plan|apply` directly when you need
+something between plan and apply (a manual review step, an Infracost
+comment, a Slack notification) that a fixed two-job workflow can't express;
+reach for `per-account-deploy.yml` when you don't.
+
+A nice side effect of bundling: since plan and apply now live in the same
+workflow run, there's no `plan_artifact_name` to keep in sync between two
+separate calls — it's fixed internally.
+
+```yaml
+# .github/workflows/deploy.yml (example -- not yet used by any repo)
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    strategy:
+      matrix:
+        environment: [dev, staging, prod]
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-environment-deploy.yml@main
+    with:
+      working_directory: environments/${{ matrix.environment }}
+      var_files_root: tf-vars
+      environment: ${{ matrix.environment }}
+      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+```
+
+Note this caller job needs no `permissions:` of its own — unlike the
+composite-action example above, `per-environment-deploy.yml` is a reusable
+workflow with its own job, so it grants `id-token: write` on its own
+`plan`/`apply` jobs internally. The caller only needs
+`permissions: id-token: write` if calling a plan/apply *composite action*
+directly, not when calling one of these `-deploy.yml` workflows.
