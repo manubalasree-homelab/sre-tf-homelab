@@ -5,6 +5,9 @@ on:
 
 jobs:
   plan:
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         region: [eastus, westus2]
@@ -16,6 +19,9 @@ jobs:
 
   apply:
     needs: plan
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         region: [eastus, westus2]
