@@ -15,7 +15,13 @@ jobs:
     with:
       working_directory: demos/scaling-demo
       plan_artifact_name: tfplan-account-${{ matrix.account }}
+      # tfvars_json sets `account` (highest precedence, always wins); region/environment
+      # come from the cascading var files below -- acct-a has an account.tfvars (sets
+      # environment), acct-b doesn't, so acct-b's plan logs a "not found" warning and
+      # falls back to global.tfvars's region only. Demonstrates both layers together.
       tfvars_json: '{"account":"${{ matrix.account }}"}'
+      var_files_root: demos/scaling-demo/vars
+      account: ${{ matrix.account }}
 
   apply:
     needs: plan
@@ -29,3 +35,4 @@ jobs:
     with:
       working_directory: demos/scaling-demo
       plan_artifact_name: tfplan-account-${{ matrix.account }}
+      account: ${{ matrix.account }}

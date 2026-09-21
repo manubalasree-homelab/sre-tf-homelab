@@ -32,4 +32,4 @@ jobs:
       # Only "prod" maps to a real GitHub Environment with a required
       # reviewer configured (see demos/README.md) -- dev/staging apply
       # straight through, prod pauses for approval.
-      environment: ${{ matrix.environment == 'prod' && 'prod' || '' }}
+      github_environment: ${{ matrix.environment == 'prod' && 'prod' || '' }}

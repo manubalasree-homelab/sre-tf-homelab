@@ -15,11 +15,19 @@ on:
         description: Name the plan file was uploaded as by a prior terraform-plan.yml call
         type: string
         default: "tfplan"
-      environment:
+      github_environment:
         description: >
           GitHub Environment to run this job under (for required-reviewer approval gates).
           Leave empty for no gate. This is how per-account/per-environment/per-region
           approval requirements are expressed, instead of separate apply workflows per scope.
+        type: string
+        default: ""
+      account:
+        description: Account-level scope this plan was created under. Must match the value passed to terraform-plan.yml, so the same Terraform workspace gets selected before applying.
+        type: string
+        default: ""
+      backend_config:
+        description: Newline-separated key=value pairs, each passed as a `terraform init -backend-config=`. Must match the value passed to terraform-plan.yml.
         type: string
         default: ""
       azure_client_id:
@@ -44,11 +52,13 @@ env:
   ARM_TENANT_ID: ${{ inputs.azure_tenant_id }}
   ARM_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
   ARM_USE_OIDC: "true"
+  ACCOUNT: ${{ inputs.account }}
+  BACKEND_CONFIG: ${{ inputs.backend_config }}
 
 jobs:
   apply:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.github_environment }}
     steps:
       - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
         with:
@@ -61,7 +71,18 @@ jobs:
 
       - name: terraform init
         working-directory: ${{ inputs.working_directory }}
-        run: terraform init
+        run: |
+          init_args=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            init_args+=("-backend-config=$line")
+          done <<< "$BACKEND_CONFIG"
+          terraform init "${init_args[@]}"
+
+      - name: Select workspace
+        if: inputs.account != ''
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform workspace select -or-create "$ACCOUNT"
 
       - name: terraform apply
         working-directory: ${{ inputs.working_directory }}

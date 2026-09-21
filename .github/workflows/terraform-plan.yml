@@ -16,9 +16,38 @@ on:
         type: string
         default: "tfplan"
       tfvars_json:
-        description: JSON object of Terraform variables to write as a .auto.tfvars.json file before planning
+        description: JSON object of ad-hoc Terraform variable overrides. Applied last, so it wins over the cascading var files below.
         type: string
         default: "{}"
+      var_files_root:
+        description: >
+          Base directory for the cascading var-file convention. If set, applies (in ascending
+          precedence, each only if the file exists): <root>/global.tfvars,
+          <root>/<account>/account.tfvars, <root>/<account>/<region>/region.tfvars,
+          <root>/<account>/<region>/<environment>/env.tfvars,
+          <root>/<account>/<region>/<environment>/<service>.tfvars. Leave empty to skip.
+        type: string
+        default: ""
+      account:
+        description: Account-level scope (e.g. an Azure subscription alias). Also selects/creates a Terraform workspace of this name when set.
+        type: string
+        default: ""
+      region:
+        description: Region-level scope
+        type: string
+        default: ""
+      environment:
+        description: Environment-level scope (e.g. dev/staging/prod)
+        type: string
+        default: ""
+      service:
+        description: Finest-grained scope -- the specific root config/service being planned
+        type: string
+        default: ""
+      backend_config:
+        description: Newline-separated key=value pairs, each passed as a `terraform init -backend-config=`
+        type: string
+        default: ""
       azure_client_id:
         description: Client ID of the Azure AD app/identity to authenticate as (OIDC, no secret needed). Leave empty for root configs that don't use the azurerm provider.
         type: string
@@ -41,6 +70,13 @@ env:
   ARM_TENANT_ID: ${{ inputs.azure_tenant_id }}
   ARM_SUBSCRIPTION_ID: ${{ inputs.azure_subscription_id }}
   ARM_USE_OIDC: "true"
+  VAR_FILES_ROOT: ${{ inputs.var_files_root }}
+  ACCOUNT: ${{ inputs.account }}
+  REGION: ${{ inputs.region }}
+  ENVIRONMENT: ${{ inputs.environment }}
+  SERVICE: ${{ inputs.service }}
+  TFVARS_JSON: ${{ inputs.tfvars_json }}
+  BACKEND_CONFIG: ${{ inputs.backend_config }}
 
 jobs:
   plan:
@@ -51,17 +87,48 @@ jobs:
           terraform_version: ${{ inputs.terraform_version }}
           terraform_wrapper: "true"
 
-      - name: Write tfvars
-        working-directory: ${{ inputs.working_directory }}
-        run: echo '${{ inputs.tfvars_json }}' > ci.auto.tfvars.json
-
       - name: terraform init
         working-directory: ${{ inputs.working_directory }}
-        run: terraform init
+        run: |
+          init_args=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            init_args+=("-backend-config=$line")
+          done <<< "$BACKEND_CONFIG"
+          terraform init "${init_args[@]}"
+
+      - name: Select workspace
+        if: inputs.account != ''
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform workspace select -or-create "$ACCOUNT"
 
       - name: terraform plan
         working-directory: ${{ inputs.working_directory }}
-        run: terraform plan -out=tfplan -input=false
+        run: |
+          var_file_args=()
+
+          if [ -n "$VAR_FILES_ROOT" ]; then
+            candidates=("$VAR_FILES_ROOT/global.tfvars")
+            [ -n "$ACCOUNT" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/account.tfvars")
+            [ -n "$ACCOUNT" ] && [ -n "$REGION" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/$REGION/region.tfvars")
+            [ -n "$ACCOUNT" ] && [ -n "$REGION" ] && [ -n "$ENVIRONMENT" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/$REGION/$ENVIRONMENT/env.tfvars")
+            [ -n "$ACCOUNT" ] && [ -n "$REGION" ] && [ -n "$ENVIRONMENT" ] && [ -n "$SERVICE" ] && candidates+=("$VAR_FILES_ROOT/$ACCOUNT/$REGION/$ENVIRONMENT/$SERVICE.tfvars")
+
+            for f in "${candidates[@]}"; do
+              if [ -e "$f" ]; then
+                echo "Using var file: $f"
+                var_file_args+=("-var-file=$f")
+              else
+                echo "::warning::var file not found, skipping: $f"
+              fi
+            done
+          fi
+
+          # Ad-hoc overrides always win: applied last, so later -var-file wins per Terraform's own precedence rules.
+          echo "$TFVARS_JSON" > ci-overrides.tfvars.json
+          var_file_args+=("-var-file=ci-overrides.tfvars.json")
+
+          terraform plan -out=tfplan -input=false "${var_file_args[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
