@@ -31,6 +31,9 @@ where to look for it and how it can be called.
 .github/workflows/commit-lint.yml
 .github/workflows/semantic-version.yml
 .github/workflows/terraform-validate.yml
+.github/workflows/per-account-deploy.yml
+.github/workflows/per-region-deploy.yml
+.github/workflows/per-environment-deploy.yml
 
 === composite actions (runs: using: composite) ===
 per-account/jobs/terraform-plan/action.yml
@@ -42,14 +45,22 @@ per-region/jobs/terraform-apply/action.yml
 actions/terraform-setup/action.yml
 ```
 
-That split is exactly the file-location rule: the four reusable workflows
-are all flat in `.github/workflows/`; the seven composite actions are
+That split is exactly the file-location rule: all seven reusable workflows
+are flat in `.github/workflows/`; the seven composite actions are
 scattered at whatever path makes sense (`actions/`, `per-account/jobs/`,
-etc.) because that restriction doesn't apply to them.
+etc.) because that restriction doesn't apply to them. Note the three
+`-deploy.yml` workflows are reusable workflows *despite* looking like
+they belong next to the composite actions they call — they need their own
+job (for `needs:` sequencing and `permissions:`/`environment:`), so they
+have to be one, and so they have to live flat here.
 
-## 2. The four reusable workflows
+## 2. The four standalone reusable workflows
 
-Each is standalone — one job, does one thing, nothing depends on another.
+Each of these four is a single job, does one thing, nothing depends on
+another. (The other three reusable workflows — `per-account-deploy.yml`
+and its siblings — are different: two jobs each, with `apply: needs:
+plan`. They're covered in §4, once composite actions have been
+introduced, since they're built out of them.)
 
 `semantic-version.yml` teaches the full anatomy of a reusable workflow:
 
@@ -134,10 +145,14 @@ Two things to notice:
 2. No `runs-on:`, no `permissions:` — a composite action doesn't have its
    own runner or its own job. It executes *inside whatever job called it*,
    inheriting that job's runner, its filesystem, its environment
-   variables, its granted permissions. This is exactly why this repo has
-   no wrapper reusable workflows in front of the plan/apply actions: there
-   was never anything job-level a wrapper could provide that the
-   *consuming* job couldn't provide itself.
+   variables, its granted permissions. This is why a *thin* wrapper
+   reusable workflow around a single composite action — one that does
+   nothing but re-declare `permissions:`/`environment:` and pass every
+   input straight through — adds nothing: the consuming job could do that
+   itself. (§4 covers `-deploy.yml`, which *does* wrap composite actions in
+   a reusable workflow, but earns it by sequencing two of them together —
+   real orchestration a single composite action can't do, not
+   pass-through.)
 
 Here's `terraform-lint.yml` calling it as a step:
 
