@@ -125,9 +125,8 @@ pass `azure_client_id`/`azure_tenant_id`/`azure_subscription_id`, all
 optional — leave them out for a root config that doesn't use the `azurerm`
 provider. They only make sense for a Terraform *root* config with a real
 backend — not a reusable module repo like `vnet`/`aks`. Nothing in this org
-uses them for real yet (there's no root-config repo, and no Azure
-federated credential set up for CI); see [`../demos/`](../demos/README.md)
-for a working proof of the pattern using a credential-free root config.
+uses them for real yet — there's no root-config repo, and no Azure
+federated credential set up for CI.
 
 Shared, generic inputs across all three plan actions:
 
@@ -187,7 +186,3 @@ jobs:
       azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
       azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 ```
-
-For a working, runnable proof of all three scopes — including the
-per-environment approval gate — using a credential-free `local`-provider
-root config so it actually runs today, see [`../demos/`](../demos/README.md).

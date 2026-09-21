@@ -1,1 +1,0 @@
-region = "global-default"
