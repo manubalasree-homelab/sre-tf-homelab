@@ -101,28 +101,29 @@ Deliberately duplicated **per scope** rather than one generic
 [ADR-0001](../docs/adr/0001-per-scope-terraform-plan-apply.md) for why. Three
 scopes, each with its own plan+apply pair:
 
-| Scope | Plan | Apply | Distinctive behavior |
+| Scope | Plan action | Apply action | Distinctive behavior |
 |---|---|---|---|
-| Account (Azure subscription) | [`per-account-plan.yml`](../.github/workflows/per-account-plan.yml) | [`per-account-apply.yml`](../.github/workflows/per-account-apply.yml) | Selects/creates a Terraform workspace named after `account` |
-| Region | [`per-region-plan.yml`](../.github/workflows/per-region-plan.yml) | [`per-region-apply.yml`](../.github/workflows/per-region-apply.yml) | No workspace switching — regions share the account's workspace |
-| Environment (dev/staging/prod) | [`per-environment-plan.yml`](../.github/workflows/per-environment-plan.yml) | [`per-environment-apply.yml`](../.github/workflows/per-environment-apply.yml) | `environment` doubles as the GitHub Environment approval-gate name — no separate gate input |
+| Account (Azure subscription) | [`per-account/jobs/terraform-plan`](../per-account/jobs/terraform-plan/action.yml) | [`per-account/jobs/terraform-apply`](../per-account/jobs/terraform-apply/action.yml) | Selects/creates a Terraform workspace named after `account` |
+| Region | [`per-region/jobs/terraform-plan`](../per-region/jobs/terraform-plan/action.yml) | [`per-region/jobs/terraform-apply`](../per-region/jobs/terraform-apply/action.yml) | No workspace switching — regions share the account's workspace |
+| Environment (dev/staging/prod) | [`per-environment/jobs/terraform-plan`](../per-environment/jobs/terraform-plan/action.yml) | [`per-environment/jobs/terraform-apply`](../per-environment/jobs/terraform-apply/action.yml) | The calling job's own `environment:` is set to the deployment environment directly — no separate gate input |
 
-Each pair is a thin flat `workflow_call` wrapper (required, since GitHub
-has no nested per-scope job-file mechanism — see the ADR) around a
-composite action that holds the actual logic:
-[`../per-account/jobs/`](../per-account/jobs/),
+Each pair lives as a composite action, called directly as a step in the
+*consuming* repo's own job — [`../per-account/jobs/`](../per-account/jobs/),
 [`../per-region/jobs/`](../per-region/jobs/),
 [`../per-environment/jobs/`](../per-environment/jobs/). Composite actions
-can live at any path, so those mirror the original per-scope folder shape
-this was modeled on; the wrapper workflows exist only because scheduling a
-real, independently-gateable job requires a `workflow_call` file, and that
-must be flat.
+can live at any path, so these mirror the original per-scope folder shape
+this was modeled on directly, with no wrapper reusable workflow in
+between. There's no `workflow_call` file for these at all: since a
+composite action's steps run *inside* whichever job calls it, that job is
+just an ordinary job in the consuming repo's own workflow, and it sets its
+own `permissions:`/`environment:` directly — there's nothing a wrapper
+workflow would add.
 
 All three plan actions authenticate to Azure via OIDC (`ARM_USE_OIDC=true`
-+ the ambient GitHub Actions ID token — no client secret, but the caller
-must grant `permissions: id-token: write`, already set in each wrapper) and
-pass `azure_client_id`/`azure_tenant_id`/`azure_subscription_id`, all
-optional — leave them out for a root config that doesn't use the `azurerm`
++ the ambient GitHub Actions ID token — no client secret, but the calling
+job must grant `permissions: id-token: write` itself) and pass
+`azure_client_id`/`azure_tenant_id`/`azure_subscription_id`, all optional
+— leave them out for a root config that doesn't use the `azurerm`
 provider. They only make sense for a Terraform *root* config with a real
 backend — not a reusable module repo like `vnet`/`aks`. Nothing in this org
 uses them for real yet — there's no root-config repo, and no Azure
@@ -159,30 +160,43 @@ on:
 
 jobs:
   plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         environment: [dev, staging, prod]
-    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-environment-plan.yml@main
-    with:
-      working_directory: environments/${{ matrix.environment }}
-      plan_artifact_name: tfplan-${{ matrix.environment }}
-      var_files_root: tf-vars
-      environment: ${{ matrix.environment }}
-      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
-      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
-      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: manubalasree-homelab/sre-tf-homelab/per-environment/jobs/terraform-plan@main
+        with:
+          working_directory: environments/${{ matrix.environment }}
+          plan_artifact_name: tfplan-${{ matrix.environment }}
+          var_files_root: tf-vars
+          environment: ${{ matrix.environment }}
+          azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
   apply:
     needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    # The job's own environment: gate -- for per-environment, the deployment
+    # environment IS the gate name directly. Configure a GitHub Environment
+    # per value (with required reviewers where wanted) to make this a real gate.
+    environment: ${{ matrix.environment }}
     strategy:
       matrix:
         environment: [dev, staging, prod]
-    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-environment-apply.yml@main
-    with:
-      working_directory: environments/${{ matrix.environment }}
-      plan_artifact_name: tfplan-${{ matrix.environment }}
-      environment: ${{ matrix.environment }}
-      azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
-      azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
-      azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: manubalasree-homelab/sre-tf-homelab/per-environment/jobs/terraform-apply@main
+        with:
+          working_directory: environments/${{ matrix.environment }}
+          plan_artifact_name: tfplan-${{ matrix.environment }}
+          azure_client_id: ${{ vars.AZURE_CLIENT_ID }}
+          azure_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+          azure_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 ```
