@@ -15,3 +15,17 @@ jobs:
     with:
       working_directory: demos/scaling-demo
       region: ${{ matrix.region }}
+      plan_artifact_name: tfplan-region-${{ matrix.region }}
+
+  apply:
+    needs: plan
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        region: [eastus, westus2]
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-region-apply.yml@main
+    with:
+      working_directory: demos/scaling-demo
+      plan_artifact_name: tfplan-region-${{ matrix.region }}
