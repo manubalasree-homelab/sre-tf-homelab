@@ -6,6 +6,9 @@ Catalog of the reusable GitHub Actions workflows this repo provides for the
 source repo — it can't be called from an arbitrary path — so the runnable
 YAML for each template below lives there, not in this directory. This file
 is the index; treat it as the entry point when looking for what's available.
+For how it all actually works mechanically (reusable workflows vs.
+composite actions, the permissions rule, common failure modes), see
+[`../docs/how-the-workflows-work.md`](../docs/how-the-workflows-work.md).
 
 ## semantic-version
 
