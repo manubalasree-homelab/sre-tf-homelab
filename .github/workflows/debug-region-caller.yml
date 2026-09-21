@@ -1,0 +1,14 @@
+name: Debug region caller
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  plan:
+    permissions:
+      id-token: write
+      contents: read
+    uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-region-plan.yml@main
+    with:
+      working_directory: demos/scaling-demo
+      region: eastus
