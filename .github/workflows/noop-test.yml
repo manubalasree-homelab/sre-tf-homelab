@@ -3,6 +3,9 @@ name: Noop test
 on:
   workflow_call: {}
 
+permissions:
+  contents: write
+
 jobs:
   noop:
     runs-on: ubuntu-latest
