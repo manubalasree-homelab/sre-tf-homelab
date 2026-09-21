@@ -1,4 +1,4 @@
-name: Debug region caller
+name: "Debug region caller"
 
 on:
   workflow_dispatch: {}
@@ -14,8 +14,8 @@ jobs:
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/per-region-plan.yml@main
     with:
       working_directory: demos/scaling-demo
-      region: ${{ matrix.region }}
       plan_artifact_name: tfplan-region-${{ matrix.region }}
+      tfvars_json: '{"region":"${{ matrix.region }}"}'
 
   apply:
     needs: plan
