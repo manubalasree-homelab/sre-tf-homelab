@@ -1,5 +1,5 @@
 ---
-status: accepted, superseded in part by ADR-0004 (upstream source is a Mirror, not the registry)
+status: superseded by ADR-0006
 ---
 
 # `aws/sre-tf-eks` is a thin wrapper module; root configs live in other repos

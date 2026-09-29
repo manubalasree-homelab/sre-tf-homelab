@@ -1,0 +1,6 @@
+.terraform/
+.terraform.lock.hcl
+*.tfstate*
+*.tfplan
+tfplan
+ci-overrides.tfvars.json
