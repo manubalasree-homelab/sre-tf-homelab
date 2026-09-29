@@ -1,0 +1,62 @@
+name: Per-account AWS Terraform apply
+description: Applies a previously-created plan for a specific account (AWS account), in its matching Terraform workspace.
+
+inputs:
+  working_directory:
+    required: true
+  terraform_version:
+    default: "latest"
+  plan_artifact_name:
+    default: "tfplan"
+  account:
+    required: true
+    description: Must match the account passed to the plan action, so the same Terraform workspace gets selected.
+  backend_config:
+    default: ""
+  aws_role_arn:
+    required: true
+    description: IAM role assumed through GitHub OIDC (vars.AWS_ROLE_ARN). The calling job needs the id-token write permission.
+  aws_region:
+    required: true
+    description: AWS region (vars.AWS_REGION).
+
+runs:
+  using: composite
+  steps:
+    - uses: manubalasree-homelab/sre-tf-homelab/actions/terraform-setup@main
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+
+    - name: Configure AWS credentials (GitHub OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws_role_arn }}
+        aws-region: ${{ inputs.aws_region }}
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.plan_artifact_name }}
+        path: ${{ inputs.working_directory }}
+
+    - name: terraform init
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        BACKEND_CONFIG: ${{ inputs.backend_config }}
+      run: |
+        init_args=()
+        while IFS= read -r line; do
+          [ -z "$line" ] && continue
+          init_args+=("-backend-config=$line")
+        done <<< "$BACKEND_CONFIG"
+        terraform init "${init_args[@]}"
+
+    - name: Select workspace for account
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: terraform workspace select -or-create "${{ inputs.account }}"
+
+    - name: terraform apply
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: terraform apply -input=false tfplan
