@@ -12,4 +12,4 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 
 ### Domain docs
 
-Single-context, with the glossary shared across repos in `sre-tf-azure-vnet/CONTEXT.md`; this repo's decisions live in `docs/adr/`. See `docs/agents/domain.md`.
+Single-context, with the glossary shared across repos in `sre-gitops-bootstrap/CONTEXT.md`; this repo's decisions live in `docs/adr/`. See `docs/agents/domain.md`.
