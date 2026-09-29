@@ -1,0 +1,51 @@
+name: Mirror sync
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # git subtree needs full history
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Open a PR for each Mirror with a newer tag in its pinned major
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f mirrors.conf ] || { echo "no mirrors.conf, nothing to do"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          base=$(git rev-parse HEAD)
+          while read -r dir url major tag; do
+            case "$dir" in ""|\#*) continue ;; esac
+            latest=$(git ls-remote --tags --refs "$url" "refs/tags/v${major}.*" | sed 's|.*refs/tags/||' | sort -V | tail -1)
+            if [ -z "$latest" ] || [ "$latest" = "$tag" ]; then
+              echo "$dir: up to date at $tag"
+              continue
+            fi
+            branch="mirror/$dir-$latest"
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+              echo "$dir: PR branch $branch already exists"
+              continue
+            fi
+            git checkout -q -b "$branch" "$base"
+            git subtree pull --prefix="$dir" "$url" "$latest" --squash -m "chore(mirror): $dir $tag -> $latest"
+            sed -i "s|^$dir[[:space:]].*|$dir $url $major $latest|" mirrors.conf
+            git add mirrors.conf
+            git commit -q -m "chore(mirror): record $dir at $latest"
+            git push -q origin "$branch"
+            gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" \
+              --title "chore(mirror): $dir $tag -> $latest" \
+              --body "Upstream $url released $latest (was $tag). Review the diff and the wrapper's validate run before merging."
+            git checkout -q "$base"
+          done < mirrors.conf

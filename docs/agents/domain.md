@@ -6,7 +6,7 @@ Layout: **single-context, shared across repos**. One glossary covers every repo 
 
 ## Before exploring, read these
 
-- **Shared glossary**: `CONTEXT.md` in `sre-tf-azure-vnet`. From this repo that is `../sre-tf-azure-vnet/CONTEXT.md` (sibling checkout), or <https://github.com/manubalasree-homelab/sre-tf-azure-vnet/blob/main/CONTEXT.md> if it is not checked out. It covers the whole platform. Don't create a per-repo `CONTEXT.md`; new terms go into the shared one (ADR-0002 in `sre-tf-azure-vnet`).
+- **Shared glossary**: `CONTEXT.md` in `sre-gitops-bootstrap`. From this repo that is `../sre-gitops-bootstrap/CONTEXT.md` (sibling checkout), or <https://github.com/manubalasree-homelab/sre-gitops-bootstrap/blob/main/CONTEXT.md> if it is not checked out. It covers the whole platform. Don't create a per-repo `CONTEXT.md`; new terms go into the shared one.
 - **`docs/adr/`** in this repo: decisions scoped to this repo. Read ADRs that touch the area you're about to work in.
 - When work crosses repo boundaries, also check the sibling repos' `docs/adr/` (e.g. `../sre-tf-azure-aks/docs/adr/`).
 

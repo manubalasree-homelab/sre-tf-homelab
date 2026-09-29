@@ -91,6 +91,11 @@ jobs:
     uses: manubalasree-homelab/sre-tf-homelab/.github/workflows/terraform-validate.yml@main
 ```
 
+`terraform-lint` also runs `tflint` when called with `run_tflint: true`
+(default `false`, so existing callers are unaffected). It expects a
+`.tflint.hcl` in `working_directory` and installs its plugins with
+`tflint --init`.
+
 Both share
 [`../actions/terraform-setup`](../actions/terraform-setup/action.yml), a
 composite action (checkout + install Terraform CLI) — composite actions,
