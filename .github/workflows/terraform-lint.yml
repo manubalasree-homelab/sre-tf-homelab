@@ -11,6 +11,10 @@ on:
         description: Terraform CLI version to install
         type: string
         default: "latest"
+      run_tflint:
+        description: Whether to also run tflint (expects a .tflint.hcl in working_directory; plugins are installed with `tflint --init`)
+        type: boolean
+        default: false
 
 jobs:
   lint:
@@ -23,3 +27,15 @@ jobs:
       - name: terraform fmt -check
         working-directory: ${{ inputs.working_directory }}
         run: terraform fmt -check -recursive -diff
+
+      - uses: terraform-linters/setup-tflint@v4
+        if: inputs.run_tflint
+
+      - name: tflint
+        if: inputs.run_tflint
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          tflint --format compact
