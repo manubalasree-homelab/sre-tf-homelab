@@ -1,0 +1,117 @@
+name: tf-eks deploy
+
+# Manual only. Each job runs in its own GitHub Environment (aws-plan, aws-apply,
+# aws-destroy), and each Environment defines its own AWS_ROLE_ARN, so the OIDC
+# trust policy matches environment subs, never pull_request or branch refs.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to run
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+      account:
+        description: Directory name of the AWS account in homelab-tf-account-vars; also the Terraform workspace
+        type: string
+        required: true
+      region:
+        type: string
+        default: us-east-1
+      environment:
+        description: Deployment environment directory (e.g. lab)
+        type: string
+        default: lab
+      terraform_version:
+        type: string
+        default: "latest"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: tf-eks-${{ inputs.account }}
+  cancel-in-progress: false
+
+env:
+  WORKING_DIRECTORY: tf-eks
+
+jobs:
+  plan:
+    if: inputs.action != 'destroy'
+    runs-on: ubuntu-latest
+    environment: aws-plan
+    steps:
+      - name: Fetch account vars
+        env:
+          TOKEN: ${{ secrets.ACCOUNT_VARS_TOKEN }}
+        run: git clone --quiet --depth 1 "https://x-access-token:${TOKEN}@github.com/manubalasree-homelab/homelab-tf-account-vars.git" "$RUNNER_TEMP/account-vars"
+
+      - uses: manubalasree-homelab/sre-tf-homelab/per-account-aws/jobs/terraform-plan@main
+        with:
+          working_directory: ${{ env.WORKING_DIRECTORY }}
+          terraform_version: ${{ inputs.terraform_version }}
+          account: ${{ inputs.account }}
+          region: ${{ inputs.region }}
+          environment: ${{ inputs.environment }}
+          service: eks
+          var_files_root: ${{ runner.temp }}/account-vars
+          tfvars_json: ${{ format('{{"region":"{0}"}}', inputs.region) }}
+          backend_config: |
+            bucket=${{ vars.TF_STATE_BUCKET }}
+            key=tf-eks/terraform.tfstate
+            region=${{ vars.AWS_REGION }}
+            dynamodb_table=${{ vars.TF_LOCK_TABLE }}
+            encrypt=true
+          aws_role_arn: ${{ vars.AWS_ROLE_ARN }}
+          aws_region: ${{ vars.AWS_REGION }}
+
+  apply:
+    if: inputs.action == 'apply'
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: aws-apply
+    steps:
+      - uses: manubalasree-homelab/sre-tf-homelab/per-account-aws/jobs/terraform-apply@main
+        with:
+          working_directory: ${{ env.WORKING_DIRECTORY }}
+          terraform_version: ${{ inputs.terraform_version }}
+          account: ${{ inputs.account }}
+          backend_config: |
+            bucket=${{ vars.TF_STATE_BUCKET }}
+            key=tf-eks/terraform.tfstate
+            region=${{ vars.AWS_REGION }}
+            dynamodb_table=${{ vars.TF_LOCK_TABLE }}
+            encrypt=true
+          aws_role_arn: ${{ vars.AWS_ROLE_ARN }}
+          aws_region: ${{ vars.AWS_REGION }}
+
+  destroy:
+    if: inputs.action == 'destroy'
+    runs-on: ubuntu-latest
+    environment: aws-destroy
+    steps:
+      - name: Fetch account vars
+        env:
+          TOKEN: ${{ secrets.ACCOUNT_VARS_TOKEN }}
+        run: git clone --quiet --depth 1 "https://x-access-token:${TOKEN}@github.com/manubalasree-homelab/homelab-tf-account-vars.git" "$RUNNER_TEMP/account-vars"
+
+      - uses: manubalasree-homelab/sre-tf-homelab/per-account-aws/jobs/terraform-destroy@main
+        with:
+          working_directory: ${{ env.WORKING_DIRECTORY }}
+          terraform_version: ${{ inputs.terraform_version }}
+          account: ${{ inputs.account }}
+          region: ${{ inputs.region }}
+          environment: ${{ inputs.environment }}
+          service: eks
+          var_files_root: ${{ runner.temp }}/account-vars
+          tfvars_json: ${{ format('{{"region":"{0}"}}', inputs.region) }}
+          backend_config: |
+            bucket=${{ vars.TF_STATE_BUCKET }}
+            key=tf-eks/terraform.tfstate
+            region=${{ vars.AWS_REGION }}
+            dynamodb_table=${{ vars.TF_LOCK_TABLE }}
+            encrypt=true
+          aws_role_arn: ${{ vars.AWS_ROLE_ARN }}
+          aws_region: ${{ vars.AWS_REGION }}

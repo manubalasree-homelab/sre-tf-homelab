@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0006
 ---
 
 # Upstream Terraform modules are mirrored into this repo as root-level folders
