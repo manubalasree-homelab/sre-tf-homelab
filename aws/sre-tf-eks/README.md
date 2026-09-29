@@ -1,7 +1,7 @@
 # sre-tf-eks
 
-Thin wrapper around [`terraform-aws-modules/eks/aws`](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest)
-(pinned `~> 21.0`; see ADR-0003). A reusable module: no backend, no provider
+Thin wrapper around the mirrored `../../terraform-aws-eks` (upstream [`terraform-aws-modules/eks/aws`](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest))
+(pinned by tag in `mirrors.conf`; see ADR-0003 and ADR-0004). A reusable module: no backend, no provider
 config. Root configs live in other repos.
 
 ```hcl

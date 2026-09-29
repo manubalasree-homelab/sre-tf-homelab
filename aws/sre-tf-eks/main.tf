@@ -1,6 +1,5 @@
 module "ebs_csi_pod_identity" {
-  source  = "terraform-aws-modules/eks-pod-identity/aws"
-  version = "~> 2.0"
+  source = "../../terraform-aws-eks-pod-identity"
 
   name                      = "${var.cluster_name}-ebs-csi"
   attach_aws_ebs_csi_policy = true
@@ -9,8 +8,7 @@ module "ebs_csi_pod_identity" {
 }
 
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.0"
+  source = "../../terraform-aws-eks"
 
   name               = var.cluster_name
   kubernetes_version = var.kubernetes_version
